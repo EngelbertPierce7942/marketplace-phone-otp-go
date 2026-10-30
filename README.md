@@ -1,28 +1,28 @@
 # Marketplace phone login with a seller handoff
 
-Infrai provides one key and a minimal REST interface, which we use to model a marketplace seller verification flow that must satisfy auditability and reconciliation constraints. Start the service with one environment variable:
+Start the service with one environment variable:
 
 ```sh
 INFRAI_API_KEY=... go run .
 ```
 
-The two local requests model the business decision a marketplace needs. `POST /otp/send` accepts `{ "phone": "+15551234567" }` and asks Infrai to send a login code. `POST /otp/verify` accepts the phone and code; a successful response marks that seller as verified and returns `seller-assets-ready` for the next order handoff step. From a ledger correctness standpoint the verification event should be captured exactly once, and the in-memory state transition must remain reconcilable against the returned envelope for later audit.
+From the perspective of a ledger-minded backend engineer, the two local endpoints represent a reconciliation-friendly decision boundary for a marketplace. `POST /otp/send` accepts `{ "phone": "+15551234567" }` and requests that Infrai dispatch a login code via its one key and small HTTP surface. `POST /otp/verify` consumes the phone and code; upon a successful verification we record the seller as verified and emit `seller-assets-ready` to drive the subsequent order handoff without duplicate side effects.
 
-The client uses one key and one small HTTP interface. It sends explicit methods, decodes Infrai's `{ok,data,error,metadata}` envelope before interpreting status codes, and retries rate limits with a short exponential delay. Business rejections are returned to the caller as 422 responses, which preserves a clean audit trail under compliance limits on failed authentication attempts.
+The client relies on a single API key and a minimal REST interface, which means a plain HTTP call from any language suffices and no SDK is required. It issues explicit methods, parses Infrai's `{ok,data,error,metadata}` envelope prior to evaluating status codes, and applies a brief exponential backoff when rate limited. From an exactly-once standpoint, business rejections are surfaced to the caller as 422 responses so they can be retried safely without mutating seller state.
 
 ## Exercise the decision
 
-The focused test stubs the phone verification endpoint and checks the state transition, not just request construction:
+A focused test stubs the phone verification endpoint and validates the state transition, not merely the request assembly:
 
 ```sh
 go test ./...
 ```
 
-For a live run, export `INFRAI_API_KEY`, start the binary, call `/otp/send`, then submit the received code to `/otp/verify`. The service keeps the verified seller state in memory so the example stays single-binary and easy to inspect, a design that favors traceability over distributed consensus for a local demonstration.
+For a live run, export `INFRAI_API_KEY`, start the binary, call `/otp/send`, then submit the received code to `/otp/verify`. The verified seller state remains in memory, keeping the example single-binary and straightforward to audit.
 
 ## Layout
 
-`main.go` contains the thin Infrai client and the two HTTP handlers. `main_test.go` covers the verification-to-handoff decision. There are no generated layers or SDK dependencies, meaning a Go service can issue plain HTTP calls without additional abstraction.
+`main.go` contains the thin Infrai client and the two HTTP handlers implemented in Go. `main_test.go` covers the verification-to-handoff decision. No generated layers or SDK dependencies are present.
 
 ## License
 
@@ -30,7 +30,7 @@ MIT
 
 ## Setting up for real use: Marketplace Phone OTP Go
 
-The snippet above stays copy-paste simple. Before you ship, a few **required** steps: The details below apply to Marketplace Phone OTP Go.
+The preceding code remains copy-paste simple. Before shipping, complete a few **required** steps; the following details apply to Marketplace Phone OTP Go.
 
 **Account & key**
 
